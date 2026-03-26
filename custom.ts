@@ -563,7 +563,7 @@ namespace Zones {
     export function positionToCoords(pos0: Position): Coords {
         return MinecraftZone.positionToCoords(pos0)
     };
-    //% block="coords|$x|$y|$z"
+    //% block="coords|x|$x|y|$y|z|$z"
     //% blockSetVariable="coords"
     //% group="Coords"
     export function coords(x: number, y: number, z: number): Coords {
