@@ -1,7 +1,7 @@
 let IS_OPERATION_RUNNING = false;
 const PAUSE_DURATION: number = 100; // ms
 const PAUSE_EVERY_TICKS: number = 200; // ticks
-const enum END { Origin, Terminal }
+const enum ZoneEnd { Origin, Terminal }
 
 player.onChat("terminate", function () {
     if (IS_OPERATION_RUNNING) {
@@ -12,8 +12,16 @@ player.onChat("terminate", function () {
             "tell " + player.name() + " " + "§c⚠ Operation Terminated by Player."
         );
     }
-});
-
+}); 
+const enum ZoneCorners {
+    Zone,
+    Top,
+    Bottom,
+    Left,   // -X
+    Right,  // +X
+    Back,   // +Z
+    Front   // -Z
+}
 type Scalar = number;
 type Coords = number[]; // Specifically a number array [x, y, z,...]
 type Endpoints = Scalar[]; // [min, max, ...]
@@ -294,12 +302,58 @@ class MinecraftZone extends Ends<Coords> implements Spacial {
         return zones;
     }
 
-    public toPosition(which_end: END): Position {
-        const vertex_map = {
-            [END.Origin]: this.origin,
-            [END.Terminal]: this.terminal
+
+    /**
+     * Converts a specific corner or surface endpoint to a Minecraft Position.
+     * This method wraps getZoneCorner for convenience.
+     * * @param selection The specific corner set (Zone itself or a face)
+     * @param which_end Whether to get the Origin (min) or Terminal (max) of that selection
+     */
+    public toPosition(selection: ZoneCorners, which_end: ZoneEnd): Position {
+        const coords = this.getZoneCorner(selection, which_end);
+        return MinecraftZone.coordsToPosition(coords);
+    }
+
+    /**
+     * Retrieves a specific endpoint (Origin or Terminal) of a selected corner set
+     * (the global zone or a surface), returning the raw Coords vertex.
+     * * @param selection The ZoneCorners enum member (Zone, Top, Bottom, etc.)
+     * @param which_end The ZoneEnd enum member (Origin or Terminal)
+     * @returns Coords - The calculated [x, y, z] vertex
+     */
+    public getZoneCorner(which_corners: ZoneCorners, which_end: ZoneEnd): Coords {
+        const min = this.origin;
+        const max = this.terminal;
+
+        switch (which_corners) {
+            case ZoneCorners.Top:
+                return (which_end === ZoneEnd.Origin)
+                    ? [min[0], max[1], min[2]]
+                    : [max[0], max[1], max[2]];
+            case ZoneCorners.Bottom:
+                return (which_end === ZoneEnd.Origin)
+                    ? [min[0], min[1], min[2]]
+                    : [max[0], min[1], max[2]];
+            case ZoneCorners.Front:
+                return (which_end === ZoneEnd.Origin)
+                    ? [min[0], min[1], min[2]]
+                    : [max[0], max[1], min[2]];
+            case ZoneCorners.Back:
+                return (which_end === ZoneEnd.Origin)
+                    ? [min[0], min[1], max[2]]
+                    : [max[0], max[1], max[2]];
+            case ZoneCorners.Left:
+                return (which_end === ZoneEnd.Origin)
+                    ? [min[0], min[1], min[2]]
+                    : [min[0], max[1], max[2]];
+            case ZoneCorners.Right:
+                return (which_end === ZoneEnd.Origin)
+                    ? [max[0], min[1], min[2]]
+                    : [max[0], max[1], max[2]];
+            case ZoneCorners.Zone:
+            default:
+                return (which_end === ZoneEnd.Origin) ? min : max;
         }
-        return MinecraftZone.coordsToPosition(vertex_map[which_end]);
     }
 
     public toString(): string {
@@ -372,10 +426,15 @@ namespace TrackingInfo {
 //% weight=500 color="#361F4D"
 //% groups=['Zones', 'Subspaces', 'Coords']
 namespace Zones {
-    //% block="$zone=variables_get(zone)|$vertex|to Position"
+    //% block="$zone=variables_get(zone)|$which_corners|$which_end|to Position"
     //% group="Zones"
-    export function zoneToPosition(zone: MinecraftZone, vertex: END) {
-        return zone.toPosition(vertex)
+    export function zoneToPosition(zone: MinecraftZone, which_corners: ZoneCorners, which_end: ZoneEnd): Position {
+        return zone.toPosition(which_corners, which_end)
+    }
+    //% block="$zone=variables_get(zone)|$which_corners|$which_end|Coords"
+    //% group="Zones"
+    export function getZoneCorner(zone: MinecraftZone, which_corners: ZoneCorners, which_end: ZoneEnd): Coords {
+        return zone.getZoneCorner(which_corners, which_end)
     }
     /**
      * Configures the segmentation of a zone axis.
@@ -393,7 +452,6 @@ namespace Zones {
 
         zone.configure_axis(axis_index, _length, _count, _interval);
     }
-
     /**
      * Resets a zone's dimensions to their default calculations.
      */
@@ -402,14 +460,13 @@ namespace Zones {
     export function resetZone(zone: MinecraftZone): void {
         zone.reset();
     }
-    //% block="create zone $name from $p0=minecraftCreateWorldPosition to $p1=minecraftCreateWorldPosition"
-    //% name.defl="zone"
+    //% block="zone|$name|$p0=minecraftCreateWorldPosition|$p1=minecraftCreateWorldPosition"
+    //% name.defl="Zone"
     //% blockSetVariable="zone"
     //% group="Zones"
     export function createZone(p0: Position, p1: Position, name?: string): MinecraftZone {
         return MinecraftZone.fromPositions(p0, p1, name);
     }
-
     /**
      * Advanced handler function that iterates through an array of spaces.
      * Includes a short pause every 100 ticks or so.
